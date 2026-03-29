@@ -1,0 +1,5 @@
+{
+  "name": "Bangladesh Prayer Times",
+  "description": "A beautiful and accurate prayer time website for various cities in Bangladesh, featuring countdowns and daily Islamic reminders.",
+  "requestFramePermissions": ["geolocation"]
+}
