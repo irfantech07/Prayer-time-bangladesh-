@@ -205,6 +205,31 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8 max-w-4xl mx-auto">
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {loading && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex flex-col items-center justify-center"
+          >
+            <RefreshCw className="w-12 h-12 text-primary animate-spin mb-4" />
+            <p className="text-primary font-medium">Loading prayer times...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error Message */}
+      {error && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-50 border border-red-200 text-red-600 px-6 py-3 rounded-full shadow-lg z-[110] flex items-center gap-3">
+          <span className="text-sm font-medium">{error}</span>
+          <button onClick={() => fetchData(city.value)} className="hover:bg-red-100 p-1 rounded-full transition-colors">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="w-full flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
         <div className="text-center md:text-left">
@@ -283,17 +308,23 @@ export default function App() {
                 <span className="text-sm uppercase tracking-[0.2em] opacity-80 mb-4">Remaining Time</span>
                 <div className="flex gap-4 md:gap-6">
                   <div className="flex flex-col items-center">
-                    <span className="text-4xl md:text-5xl font-light">{timeRemaining?.hours.toString().padStart(2, '0')}</span>
+                    <span className="text-4xl md:text-5xl font-light">
+                      {timeRemaining ? timeRemaining.hours.toString().padStart(2, '0') : '00'}
+                    </span>
                     <span className="text-[10px] uppercase tracking-widest opacity-60">Hours</span>
                   </div>
                   <span className="text-4xl md:text-5xl font-light opacity-30">:</span>
                   <div className="flex flex-col items-center">
-                    <span className="text-4xl md:text-5xl font-light">{timeRemaining?.minutes.toString().padStart(2, '0')}</span>
+                    <span className="text-4xl md:text-5xl font-light">
+                      {timeRemaining ? timeRemaining.minutes.toString().padStart(2, '0') : '00'}
+                    </span>
                     <span className="text-[10px] uppercase tracking-widest opacity-60">Minutes</span>
                   </div>
                   <span className="text-4xl md:text-5xl font-light opacity-30">:</span>
                   <div className="flex flex-col items-center">
-                    <span className="text-4xl md:text-5xl font-light">{timeRemaining?.seconds.toString().padStart(2, '0')}</span>
+                    <span className="text-4xl md:text-5xl font-light">
+                      {timeRemaining ? timeRemaining.seconds.toString().padStart(2, '0') : '00'}
+                    </span>
                     <span className="text-[10px] uppercase tracking-widest opacity-60">Seconds</span>
                   </div>
                 </div>
