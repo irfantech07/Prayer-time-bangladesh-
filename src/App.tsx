@@ -15,10 +15,14 @@ import {
   Sunset, 
   ChevronDown,
   RefreshCw,
-  Quote
+  Compass,
+  Navigation,
+  HelpCircle,
+  Search,
+  X
 } from 'lucide-react';
 import { format, parse, isAfter, addMinutes, differenceInSeconds } from 'date-fns';
-import { getPrayerTimes } from './services/prayerService';
+import { getPrayerTimes, getPrayerTimesByCoords, getQiblaDirection } from './services/prayerService';
 import { PrayerData, BANGLADESH_CITIES, City } from './types';
 import { cn } from './lib/utils';
 
@@ -31,14 +35,6 @@ const PRAYER_NAMES = {
   Isha: "Isha",
 };
 
-const ISLAMIC_QUOTES = [
-  "The best of you are those who have the best manners and character. - Prophet Muhammad (PBUH)",
-  "Verily, with hardship comes ease. - Quran 94:6",
-  "Allah does not burden a soul beyond that it can bear. - Quran 2:286",
-  "The most beloved of deeds to Allah are those that are most consistent, even if they are small. - Prophet Muhammad (PBUH)",
-  "Remember Me; I will remember you. - Quran 2:152",
-];
-
 export default function App() {
   const [city, setCity] = useState<City>(BANGLADESH_CITIES[0]);
   const [data, setData] = useState<PrayerData | null>(null);
@@ -46,26 +42,44 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isCityMenuOpen, setIsCityMenuOpen] = useState(false);
-  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isUsingLocation, setIsUsingLocation] = useState(false);
+  const [locationName, setLocationName] = useState<string | null>(null);
+  const [qiblaDirection, setQiblaDirection] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    const quoteTimer = setInterval(() => {
-      setQuoteIndex((prev) => (prev + 1) % ISLAMIC_QUOTES.length);
-    }, 10000);
-    return () => clearInterval(quoteTimer);
-  }, []);
+  const filteredCities = useMemo(() => {
+    return BANGLADESH_CITIES.filter(c => 
+      c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm]);
 
-  const fetchData = async (cityName: string) => {
+  const fetchData = async (cityName?: string, coords?: { lat: number; lng: number }) => {
     setLoading(true);
     setError(null);
     try {
-      const prayerData = await getPrayerTimes(cityName);
+      let prayerData: PrayerData;
+      if (coords) {
+        prayerData = await getPrayerTimesByCoords(coords.lat, coords.lng);
+        // Try to get location name from timezone if possible, or just use "Current Location"
+        setLocationName(prayerData.meta.timezone);
+      } else if (cityName) {
+        prayerData = await getPrayerTimes(cityName);
+        setLocationName(null);
+      } else {
+        return;
+      }
+
       setData(prayerData);
+      
+      if (prayerData.meta) {
+        const qibla = await getQiblaDirection(prayerData.meta.latitude, prayerData.meta.longitude);
+        setQiblaDirection(qibla);
+      }
     } catch (err) {
       setError("Failed to load prayer times. Please try again.");
     } finally {
@@ -73,9 +87,32 @@ export default function App() {
     }
   };
 
+  const handleUseLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setIsUsingLocation(true);
+        fetchData(undefined, { lat: latitude, lng: longitude });
+        setIsCityMenuOpen(false);
+      },
+      (err) => {
+        setError("Unable to retrieve your location. Please select a city manually.");
+        setLoading(false);
+      }
+    );
+  };
+
   useEffect(() => {
-    fetchData(city.value);
-  }, [city]);
+    if (!isUsingLocation) {
+      fetchData(city.value);
+    }
+  }, [city, isUsingLocation]);
 
   const activePrayerInfo = useMemo(() => {
     if (!data) return null;
@@ -174,19 +211,22 @@ export default function App() {
         name: 'After Sunrise', 
         start: timings.Sunrise, 
         end: format(addMinutes(sunrise, 15), 'HH:mm'),
-        description: '15 mins after sunrise'
+        description: '15 mins after sunrise',
+        explanation: 'It is forbidden to pray when the sun is rising until it has risen high, as it is the time when the sun rises between the two horns of Satan.'
       },
       { 
         name: 'Zenith (Zawal)', 
         start: format(addMinutes(dhuhr, -10), 'HH:mm'), 
         end: timings.Dhuhr,
-        description: '10 mins before Dhuhr'
+        description: '10 mins before Dhuhr',
+        explanation: 'It is forbidden to pray when the sun is at its highest point in the sky until it has passed the meridian, as this is the time when Hellfire is fueled.'
       },
       { 
         name: 'Before Sunset', 
         start: format(addMinutes(maghrib, -15), 'HH:mm'), 
         end: timings.Maghrib,
-        description: '15 mins before Maghrib'
+        description: '15 mins before Maghrib',
+        explanation: 'It is forbidden to pray when the sun is setting until it has completely set, as it sets between the two horns of Satan.'
       }
     ];
   };
@@ -233,7 +273,7 @@ export default function App() {
       {/* Header */}
       <header className="w-full flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
         <div className="text-center md:text-left">
-          <h1 className="serif text-4xl md:text-5xl font-medium text-primary mb-2">Bangladesh Prayer Times</h1>
+          <h1 className="serif text-4xl md:text-5xl font-medium text-primary mb-2">Prayer Times</h1>
           <div className="flex items-center justify-center md:justify-start gap-2 text-gray-500">
             <CalendarIcon className="w-4 h-4" />
             <span>{format(currentTime, 'EEEE, MMMM do, yyyy')}</span>
@@ -248,11 +288,14 @@ export default function App() {
 
         <div className="relative">
           <button 
-            onClick={() => setIsCityMenuOpen(!isCityMenuOpen)}
+            onClick={() => {
+              setIsCityMenuOpen(!isCityMenuOpen);
+              if (!isCityMenuOpen) setSearchTerm('');
+            }}
             className="flex items-center gap-2 bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
           >
             <MapPin className="w-4 h-4 text-primary" />
-            <span className="font-medium">{city.name}</span>
+            <span className="font-medium">{isUsingLocation ? (locationName || "Current Location") : city.name}</span>
             <ChevronDown className={cn("w-4 h-4 transition-transform", isCityMenuOpen && "rotate-180")} />
           </button>
 
@@ -262,23 +305,66 @@ export default function App() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 max-h-64 overflow-y-auto"
+                className="absolute top-full right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col z-50 overflow-hidden"
               >
-                {BANGLADESH_CITIES.map((c) => (
-                  <button
-                    key={c.value}
-                    onClick={() => {
-                      setCity(c);
-                      setIsCityMenuOpen(false);
-                    }}
-                    className={cn(
-                      "w-full text-left px-4 py-2 hover:bg-secondary transition-colors",
-                      city.value === c.value && "text-primary font-semibold bg-secondary"
+                {/* Use My Location Button */}
+                <button
+                  onClick={handleUseLocation}
+                  className="flex items-center gap-2 px-4 py-3 hover:bg-primary/5 text-primary font-medium border-b border-gray-50 transition-colors"
+                >
+                  <Navigation className="w-4 h-4" />
+                  <span className="text-sm">Use My Location</span>
+                </button>
+
+                {/* Search Input */}
+                <div className="p-3 border-bottom border-gray-100 bg-gray-50/50">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                    <input 
+                      type="text"
+                      placeholder="Search city..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                      autoFocus
+                    />
+                    {searchTerm && (
+                      <button 
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
+                      >
+                        <X className="w-3 h-3 text-gray-400" />
+                      </button>
                     )}
-                  >
-                    {c.name}
-                  </button>
-                ))}
+                  </div>
+                </div>
+
+                {/* City List */}
+                <div className="max-h-64 overflow-y-auto py-1">
+                  {filteredCities.length > 0 ? (
+                    filteredCities.map((c) => (
+                      <button
+                        key={c.value}
+                        onClick={() => {
+                          setCity(c);
+                          setIsUsingLocation(false);
+                          setIsCityMenuOpen(false);
+                          setSearchTerm('');
+                        }}
+                        className={cn(
+                          "w-full text-left px-4 py-2.5 hover:bg-secondary transition-colors text-sm",
+                          city.value === c.value && "text-primary font-semibold bg-secondary"
+                        )}
+                      >
+                        {c.name}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-8 text-center">
+                      <p className="text-xs text-gray-400">No cities found</p>
+                    </div>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -411,7 +497,16 @@ export default function App() {
               {getForbiddenTimes().map((item, idx) => (
                 <div key={idx} className="flex flex-col gap-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">{item.name}</span>
+                    <div className="flex items-center gap-1.5 group relative">
+                      <span className="text-sm font-medium text-gray-700">{item.name}</span>
+                      <HelpCircle className="w-3 h-3 text-gray-300 cursor-help hover:text-red-400 transition-colors" />
+                      
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-56 p-3 bg-gray-900 text-white text-[10px] rounded-xl shadow-xl z-50 animate-in fade-in zoom-in duration-200">
+                        <p className="leading-relaxed">{item.explanation}</p>
+                        <div className="absolute top-full left-4 border-8 border-transparent border-t-gray-900" />
+                      </div>
+                    </div>
                     <span className="text-xs text-red-500 font-mono font-bold">
                       {formatTime12h(item.start)} - {formatTime12h(item.end)}
                     </span>
@@ -425,20 +520,67 @@ export default function App() {
             </p>
           </div>
 
-          {/* Quote Card */}
-          <div className="bg-accent/10 rounded-[32px] p-8 shadow-sm border border-accent/10 flex flex-col items-center text-center">
-            <Quote className="w-8 h-8 text-accent mb-4 opacity-50" />
-            <AnimatePresence mode="wait">
-              <motion.p 
-                key={quoteIndex}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="serif text-xl text-accent italic leading-relaxed"
+          {/* Qibla Direction */}
+          <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100 flex flex-col items-center">
+            <h4 className="font-semibold text-sm mb-6 flex items-center gap-2 w-full">
+              <Compass className="w-4 h-4 text-primary" />
+              Qibla Direction
+            </h4>
+            
+            <div className="relative w-40 h-40 mb-6">
+              {/* Compass Ring */}
+              <div className="absolute inset-0 border-4 border-gray-100 rounded-full" />
+              
+              {/* Directions */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="absolute top-1 text-[10px] font-bold text-gray-400">N</span>
+                <span className="absolute right-1 text-[10px] font-bold text-gray-400">E</span>
+                <span className="absolute bottom-1 text-[10px] font-bold text-gray-400">S</span>
+                <span className="absolute left-1 text-[10px] font-bold text-gray-400">W</span>
+              </div>
+
+              {/* Qibla Needle */}
+              <motion.div 
+                className="absolute inset-0 flex items-center justify-center"
+                animate={{ rotate: qiblaDirection || 0 }}
+                transition={{ type: "spring", stiffness: 50 }}
               >
-                "{ISLAMIC_QUOTES[quoteIndex]}"
-              </motion.p>
-            </AnimatePresence>
+                {/* Path Line */}
+                <div className="absolute top-0 bottom-1/2 w-px border-l-2 border-dashed border-primary/20" />
+                
+                <div className="relative w-1 h-32 flex flex-col items-center">
+                  <div className="w-4 h-4 bg-primary rounded-full shadow-lg z-10" />
+                  <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[24px] border-b-primary absolute top-0" />
+                  <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[24px] border-t-gray-200 absolute bottom-0" />
+                </div>
+              </motion.div>
+              
+              {/* Kaaba Icon Indicator */}
+              <motion.div 
+                className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                animate={{ rotate: qiblaDirection || 0 }}
+                transition={{ type: "spring", stiffness: 50 }}
+              >
+                <div className="absolute -top-10 flex flex-col items-center gap-1">
+                  <div className="w-8 h-8 bg-gray-900 rounded-lg relative flex flex-col items-center shadow-xl border-2 border-white">
+                    {/* Kaaba Gold Belt */}
+                    <div className="w-full h-1.5 bg-yellow-500 absolute top-2" />
+                    {/* Kaaba Door (Visual hint) */}
+                    <div className="w-1.5 h-2.5 bg-yellow-600 absolute bottom-1 right-1.5 rounded-sm" />
+                  </div>
+                  <span className="text-[8px] font-bold text-primary uppercase tracking-tighter bg-white px-1 rounded shadow-sm border border-gray-100">Kaaba</span>
+                </div>
+              </motion.div>
+            </div>
+
+            <div className="text-center">
+              <p className="text-2xl font-light text-primary mb-1">
+                {qiblaDirection ? `${qiblaDirection.toFixed(1)}°` : '...'}
+              </p>
+              <p className="text-[10px] uppercase tracking-widest text-gray-400">
+                Degrees from North
+              </p>
+            </div>
           </div>
 
         </section>
@@ -448,8 +590,8 @@ export default function App() {
       <footer className="w-full mt-20 pt-12 border-t border-gray-200 text-center text-gray-400 text-sm pb-16">
         <div className="flex flex-wrap justify-center gap-x-8 gap-y-4 mb-8 text-xs uppercase tracking-widest opacity-70">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-500">Country:</span>
-            <span>Bangladesh</span>
+            <span className="font-semibold text-gray-500">Location:</span>
+            <span>{isUsingLocation ? (locationName || "Current Location") : city.name}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-gray-500">Method:</span>
@@ -457,10 +599,10 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-gray-500">Timezone:</span>
-            <span>Asia/Dhaka</span>
+            <span>{data?.meta.timezone || "UTC"}</span>
           </div>
         </div>
-        <p>© {new Date().getFullYear()} Bangladesh Prayer Times. Data provided by Aladhan API.</p>
+        <p>© {new Date().getFullYear()} Prayer Times. Data provided by Aladhan API.</p>
         <p className="mt-2">May your prayers be accepted.</p>
       </footer>
     </div>

@@ -38,6 +38,11 @@ export interface PrayerData {
       year: string;
     };
   };
+  meta: {
+    latitude: number;
+    longitude: number;
+    timezone: string;
+  };
 }
 
 export interface City {
