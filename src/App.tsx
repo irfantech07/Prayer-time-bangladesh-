@@ -18,7 +18,10 @@ import {
   Navigation,
   HelpCircle,
   Search,
-  X
+  X,
+  Bell,
+  BellOff,
+  Settings
 } from 'lucide-react';
 import { format, parse, isAfter, addMinutes, differenceInSeconds } from 'date-fns';
 import { getPrayerTimes, getPrayerTimesByCoords } from './services/prayerService';
@@ -44,11 +47,77 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isUsingLocation, setIsUsingLocation] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState(() => {
+    const saved = localStorage.getItem('prayer_notifications');
+    return saved ? JSON.parse(saved) : {
+      enabled: false,
+      prayers: { Fajr: true, Dhuhr: true, Asr: true, Maghrib: true, Isha: true },
+      reminderMinutes: 10
+    };
+  });
+  const [lastNotified, setLastNotified] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    localStorage.setItem('prayer_notifications', JSON.stringify(notificationSettings));
+  }, [notificationSettings]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!notificationSettings.enabled || !data) return;
+
+    const checkNotifications = () => {
+      const now = new Date();
+      const timings = data.timings;
+      const todayStr = format(now, 'yyyy-MM-dd');
+
+      Object.entries(PRAYER_NAMES).forEach(([key, name]) => {
+        if (key === 'Sunrise' || !notificationSettings.prayers[key]) return;
+
+        try {
+          const prayerTime = parse(timings[key as keyof typeof timings], 'HH:mm', now);
+          const reminderTime = addMinutes(prayerTime, -notificationSettings.reminderMinutes);
+          
+          const diffSeconds = differenceInSeconds(now, reminderTime);
+          // Notify if it's within 30 seconds of the reminder time
+          if (diffSeconds >= 0 && diffSeconds < 30 && lastNotified[key] !== todayStr) {
+            if (Notification.permission === 'granted') {
+              new Notification(`Prayer Reminder: ${name}`, {
+                body: `${name} starts in ${notificationSettings.reminderMinutes} minutes.`,
+                icon: '/favicon.ico'
+              });
+              setLastNotified(prev => ({ ...prev, [key]: todayStr }));
+            }
+          }
+        } catch (e) {
+          console.error(`Error checking notification for ${key}:`, e);
+        }
+      });
+    };
+
+    const interval = setInterval(checkNotifications, 15000); // Check every 15 seconds
+    return () => clearInterval(interval);
+  }, [notificationSettings, data, lastNotified]);
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support desktop notifications.');
+      return;
+    }
+
+    if (Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setNotificationSettings(prev => ({ ...prev, enabled: true }));
+      }
+    } else {
+      setNotificationSettings(prev => ({ ...prev, enabled: !prev.enabled }));
+    }
+  };
 
   const filteredCities = useMemo(() => {
     return BANGLADESH_CITIES.filter(c => 
@@ -193,13 +262,13 @@ export default function App() {
   const getForbiddenTimes = () => {
     if (!data) return [];
     const timings = data.timings;
-    const now = new Date();
+    const now = currentTime;
     
     const sunrise = parse(timings.Sunrise, 'HH:mm', now);
     const dhuhr = parse(timings.Dhuhr, 'HH:mm', now);
     const maghrib = parse(timings.Maghrib, 'HH:mm', now);
 
-    return [
+    const forbidden = [
       { 
         name: 'After Sunrise', 
         start: timings.Sunrise, 
@@ -222,6 +291,13 @@ export default function App() {
         explanation: 'It is forbidden to pray when the sun is setting until it has completely set, as it sets between the two horns of Satan.'
       }
     ];
+
+    return forbidden.map(item => {
+      const startTime = parse(item.start, 'HH:mm', now);
+      const endTime = parse(item.end, 'HH:mm', now);
+      const isActive = (now >= startTime && now <= endTime);
+      return { ...item, isActive };
+    });
   };
 
   const getPrayerIcon = (name: string) => {
@@ -238,6 +314,108 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8 max-w-4xl mx-auto">
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
+            onClick={() => setIsSettingsOpen(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white rounded-[32px] w-full max-w-md p-8 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="serif text-3xl text-primary">Notifications</h2>
+                <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                  <X className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-8">
+                {/* Master Toggle */}
+                <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    {notificationSettings.enabled ? <Bell className="text-primary" /> : <BellOff className="text-gray-400" />}
+                    <span className="font-medium">Enable Notifications</span>
+                  </div>
+                  <button 
+                    onClick={requestNotificationPermission}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-colors relative",
+                      notificationSettings.enabled ? "bg-primary" : "bg-gray-200"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform",
+                      notificationSettings.enabled ? "left-7" : "left-1"
+                    )} />
+                  </button>
+                </div>
+
+                {/* Reminder Duration */}
+                <div>
+                  <label className="text-xs uppercase tracking-widest text-gray-400 mb-3 block">Reminder Time</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[5, 10, 15, 30].map(m => (
+                      <button 
+                        key={m}
+                        onClick={() => setNotificationSettings(prev => ({ ...prev, reminderMinutes: m }))}
+                        className={cn(
+                          "py-2 rounded-xl text-sm font-medium transition-all",
+                          notificationSettings.reminderMinutes === m 
+                            ? "bg-primary text-white shadow-lg shadow-primary/20" 
+                            : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                        )}
+                      >
+                        {m}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Prayer Selection */}
+                <div>
+                  <label className="text-xs uppercase tracking-widest text-gray-400 mb-3 block">Select Prayers</label>
+                  <div className="space-y-2">
+                    {Object.entries(PRAYER_NAMES).map(([key, name]) => {
+                      if (key === 'Sunrise') return null;
+                      return (
+                        <button 
+                          key={key}
+                          onClick={() => setNotificationSettings(prev => ({
+                            ...prev,
+                            prayers: { ...prev.prayers, [key]: !prev.prayers[key] }
+                          }))}
+                          className={cn(
+                            "w-full flex items-center justify-between p-3 rounded-xl transition-all",
+                            notificationSettings.prayers[key] ? "bg-primary/5 text-primary" : "text-gray-500 hover:bg-gray-50"
+                          )}
+                        >
+                          <span className="font-medium">{name}</span>
+                          <div className={cn(
+                            "w-5 h-5 rounded border flex items-center justify-center transition-colors",
+                            notificationSettings.prayers[key] ? "bg-primary border-primary" : "border-gray-300"
+                          )}>
+                            {notificationSettings.prayers[key] && <div className="w-2 h-2 bg-white rounded-full" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Loading Overlay */}
       <AnimatePresence>
         {loading && (
@@ -279,18 +457,27 @@ export default function App() {
           </div>
         </div>
 
-        <div className="relative">
+        <div className="flex items-center gap-4">
           <button 
-            onClick={() => {
-              setIsCityMenuOpen(!isCityMenuOpen);
-              if (!isCityMenuOpen) setSearchTerm('');
-            }}
-            className="flex items-center gap-2 bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-3 bg-white rounded-full shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-gray-500 hover:text-primary"
+            title="Notification Settings"
           >
-            <MapPin className="w-4 h-4 text-primary" />
-            <span className="font-medium">{isUsingLocation ? (locationName || "Current Location") : city.name}</span>
-            <ChevronDown className={cn("w-4 h-4 transition-transform", isCityMenuOpen && "rotate-180")} />
+            <Settings className="w-5 h-5" />
           </button>
+
+          <div className="relative">
+            <button 
+              onClick={() => {
+                setIsCityMenuOpen(!isCityMenuOpen);
+                if (!isCityMenuOpen) setSearchTerm('');
+              }}
+              className="flex items-center gap-2 bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+            >
+              <MapPin className="w-4 h-4 text-primary" />
+              <span className="font-medium">{isUsingLocation ? (locationName || "Current Location") : city.name}</span>
+              <ChevronDown className={cn("w-4 h-4 transition-transform", isCityMenuOpen && "rotate-180")} />
+            </button>
 
           <AnimatePresence>
             {isCityMenuOpen && (
@@ -361,6 +548,7 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          </div>
         </div>
       </header>
 
@@ -488,10 +676,26 @@ export default function App() {
             </h4>
             <div className="space-y-4">
               {getForbiddenTimes().map((item, idx) => (
-                <div key={idx} className="flex flex-col gap-1">
+                <div 
+                  key={idx} 
+                  className={cn(
+                    "flex flex-col gap-1 p-3 rounded-2xl transition-all",
+                    item.isActive ? "bg-red-50 border border-red-100" : "bg-transparent"
+                  )}
+                >
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1.5 group relative">
-                      <span className="text-sm font-medium text-gray-700">{item.name}</span>
+                      <div className="flex items-center gap-2">
+                        {item.isActive && (
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                          </span>
+                        )}
+                        <span className={cn("text-sm font-medium", item.isActive ? "text-red-700" : "text-gray-700")}>
+                          {item.name}
+                        </span>
+                      </div>
                       <HelpCircle className="w-3 h-3 text-gray-300 cursor-help hover:text-red-400 transition-colors" />
                       
                       {/* Tooltip */}
@@ -500,11 +704,13 @@ export default function App() {
                         <div className="absolute top-full left-4 border-8 border-transparent border-t-gray-900" />
                       </div>
                     </div>
-                    <span className="text-xs text-red-500 font-mono font-bold">
+                    <span className={cn("text-xs font-mono font-bold", item.isActive ? "text-red-600" : "text-red-500")}>
                       {formatTime12h(item.start)} - {formatTime12h(item.end)}
                     </span>
                   </div>
-                  <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.description}</span>
+                  <span className={cn("text-[10px] uppercase tracking-widest", item.isActive ? "text-red-400" : "text-gray-400")}>
+                    {item.description}
+                  </span>
                 </div>
               ))}
             </div>
