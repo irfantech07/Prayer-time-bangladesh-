@@ -443,7 +443,9 @@ export default function App() {
       {/* Header */}
       <header className="w-full flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
         <div className="text-center md:text-left">
-          <h1 className="serif text-4xl md:text-5xl font-medium text-primary mb-2">Prayer Times</h1>
+          <h1 className="serif text-4xl md:text-5xl font-medium text-primary mb-3">
+            Prayer Times in <span className="text-primary/70">{isUsingLocation ? (locationName || "Current Location") : city.name}</span>
+          </h1>
           <div className="flex items-center justify-center md:justify-start gap-2 text-gray-500">
             <CalendarIcon className="w-4 h-4" />
             <span>{format(currentTime, 'EEEE, MMMM do, yyyy')}</span>
