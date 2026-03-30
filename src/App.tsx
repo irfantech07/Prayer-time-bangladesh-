@@ -28,11 +28,12 @@ import { PrayerData, BANGLADESH_CITIES, City } from './types';
 import { cn } from './lib/utils';
 
 const PRAYER_NAMES = {
+  Imsak: "Sheri",
   Fajr: "Fajr",
   Sunrise: "Sunrise",
   Dhuhr: "Dhuhr",
   Asr: "Asr",
-  Maghrib: "Maghrib",
+  Maghrib: "Iftar",
   Isha: "Isha",
 };
 
@@ -243,6 +244,8 @@ export default function App() {
     const timings = data.timings;
     
     switch (key) {
+      case 'Imsak':
+        return { start: timings.Imsak, end: timings.Fajr };
       case 'Fajr':
         return { start: timings.Fajr, end: timings.Sunrise };
       case 'Dhuhr':
@@ -252,7 +255,7 @@ export default function App() {
       case 'Maghrib':
         return { start: timings.Maghrib, end: timings.Isha };
       case 'Isha':
-        return { start: timings.Isha, end: timings.Fajr }; // Technically ends at Fajr next day
+        return { start: timings.Isha, end: timings.Imsak }; // Technically ends at next day's Sheri
       default:
         return { start: timings[key as keyof typeof timings], end: '' };
     }
@@ -301,6 +304,7 @@ export default function App() {
 
   const getPrayerIcon = (name: string) => {
     switch (name) {
+      case 'Imsak': return <Sunrise className="w-5 h-5" />;
       case 'Fajr': return <Sunrise className="w-5 h-5" />;
       case 'Sunrise': return <Sun className="w-5 h-5" />;
       case 'Dhuhr': return <Sun className="w-5 h-5" />;
@@ -604,6 +608,51 @@ export default function App() {
           </div>
         </section>
 
+        {/* Fast Timings Card */}
+        <section className="lg:col-span-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
+                  <Sunrise className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-400">Sheri (End Time)</p>
+                  <h4 className="serif text-2xl text-primary">{data ? formatTime12h(data.timings.Imsak) : '--:--'}</h4>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-gray-400">Fajr starts at</p>
+                <p className="text-sm font-medium text-primary">{data ? formatTime12h(data.timings.Fajr) : '--:--'}</p>
+              </div>
+            </motion.div>
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center">
+                  <Sunset className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-400">Iftar (Maghrib)</p>
+                  <h4 className="serif text-2xl text-primary">{data ? formatTime12h(data.timings.Maghrib) : '--:--'}</h4>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-gray-400">Sunset at</p>
+                <p className="text-sm font-medium text-primary">{data ? formatTime12h(data.timings.Sunset) : '--:--'}</p>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
         {/* Prayer List */}
         <section className="lg:col-span-8">
           <div className="bg-white rounded-[32px] p-6 md:p-8 shadow-sm border border-gray-100">
@@ -621,6 +670,31 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Active Forbidden Time Warning in Schedule */}
+                {getForbiddenTimes().find(t => t.isActive) && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-red-500 text-white rounded-2xl p-5 shadow-lg shadow-red-200 flex items-center justify-between gap-4 border-2 border-red-400"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="bg-white/20 p-2 rounded-xl">
+                        <Sun className="w-6 h-6 animate-pulse" />
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-widest opacity-80 font-bold">Forbidden Time Active</p>
+                        <h4 className="text-xl font-bold">{getForbiddenTimes().find(t => t.isActive)?.name}</h4>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-widest opacity-70">Ends At</p>
+                      <p className="text-2xl font-mono font-bold">
+                        {formatTime12h(getForbiddenTimes().find(t => t.isActive)?.end || '')}
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
                 {data && Object.entries(PRAYER_NAMES).map(([key, label]) => {
                   if (key === 'Sunrise') return null; // We use Sunrise as Fajr's end time
                   const isNext = activePrayerInfo?.name === key;
