@@ -20,8 +20,7 @@ import {
   Search,
   X,
   Bell,
-  BellOff,
-  Settings
+  BellOff
 } from 'lucide-react';
 import { format, parse, isAfter, addMinutes, differenceInSeconds } from 'date-fns';
 import { getPrayerTimes, getPrayerTimesByCoords } from './services/prayerService';
@@ -460,10 +459,13 @@ export default function App() {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => setIsSettingsOpen(true)}
-            className="p-3 bg-white rounded-full shadow-sm border border-gray-100 hover:shadow-md transition-shadow text-gray-500 hover:text-primary"
+            className={cn(
+              "p-3 bg-white rounded-full shadow-sm border border-gray-100 hover:shadow-md transition-shadow",
+              notificationSettings.enabled ? "text-primary" : "text-gray-400"
+            )}
             title="Notification Settings"
           >
-            <Settings className="w-5 h-5" />
+            {notificationSettings.enabled ? <Bell className="w-5 h-5" /> : <BellOff className="text-gray-400 w-5 h-5" />}
           </button>
 
           <div className="relative">
