@@ -84,7 +84,7 @@ export default function App() {
           const diffSeconds = differenceInSeconds(now, reminderTime);
           // Notify if it's within 30 seconds of the reminder time
           if (diffSeconds >= 0 && diffSeconds < 30 && lastNotified[key] !== todayStr) {
-            if ('Notification' in window && Notification.permission === 'granted') {
+            if (Notification.permission === 'granted') {
               new Notification(`Prayer Reminder: ${name}`, {
                 body: `${name} starts in ${notificationSettings.reminderMinutes} minutes.`,
                 icon: '/favicon.ico'
