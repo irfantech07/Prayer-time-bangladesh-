@@ -15,14 +15,13 @@ import {
   Sunset, 
   ChevronDown,
   RefreshCw,
-  Compass,
   Navigation,
   HelpCircle,
   Search,
   X
 } from 'lucide-react';
 import { format, parse, isAfter, addMinutes, differenceInSeconds } from 'date-fns';
-import { getPrayerTimes, getPrayerTimesByCoords, getQiblaDirection } from './services/prayerService';
+import { getPrayerTimes, getPrayerTimesByCoords } from './services/prayerService';
 import { PrayerData, BANGLADESH_CITIES, City } from './types';
 import { cn } from './lib/utils';
 
@@ -45,7 +44,6 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isUsingLocation, setIsUsingLocation] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
-  const [qiblaDirection, setQiblaDirection] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -75,11 +73,6 @@ export default function App() {
       }
 
       setData(prayerData);
-      
-      if (prayerData.meta) {
-        const qibla = await getQiblaDirection(prayerData.meta.latitude, prayerData.meta.longitude);
-        setQiblaDirection(qibla);
-      }
     } catch (err) {
       setError("Failed to load prayer times. Please try again.");
     } finally {
@@ -518,69 +511,6 @@ export default function App() {
             <p className="text-[10px] text-gray-400 mt-6 italic leading-relaxed">
               * It is forbidden (Makruh) to perform any prayer during these specific times.
             </p>
-          </div>
-
-          {/* Qibla Direction */}
-          <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100 flex flex-col items-center">
-            <h4 className="font-semibold text-sm mb-6 flex items-center gap-2 w-full">
-              <Compass className="w-4 h-4 text-primary" />
-              Qibla Direction
-            </h4>
-            
-            <div className="relative w-40 h-40 mb-6">
-              {/* Compass Ring */}
-              <div className="absolute inset-0 border-4 border-gray-100 rounded-full" />
-              
-              {/* Directions */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="absolute top-1 text-[10px] font-bold text-gray-400">N</span>
-                <span className="absolute right-1 text-[10px] font-bold text-gray-400">E</span>
-                <span className="absolute bottom-1 text-[10px] font-bold text-gray-400">S</span>
-                <span className="absolute left-1 text-[10px] font-bold text-gray-400">W</span>
-              </div>
-
-              {/* Qibla Needle */}
-              <motion.div 
-                className="absolute inset-0 flex items-center justify-center"
-                animate={{ rotate: qiblaDirection || 0 }}
-                transition={{ type: "spring", stiffness: 50 }}
-              >
-                {/* Path Line */}
-                <div className="absolute top-0 bottom-1/2 w-px border-l-2 border-dashed border-primary/20" />
-                
-                <div className="relative w-1 h-32 flex flex-col items-center">
-                  <div className="w-4 h-4 bg-primary rounded-full shadow-lg z-10" />
-                  <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[24px] border-b-primary absolute top-0" />
-                  <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[24px] border-t-gray-200 absolute bottom-0" />
-                </div>
-              </motion.div>
-              
-              {/* Kaaba Icon Indicator */}
-              <motion.div 
-                className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                animate={{ rotate: qiblaDirection || 0 }}
-                transition={{ type: "spring", stiffness: 50 }}
-              >
-                <div className="absolute -top-10 flex flex-col items-center gap-1">
-                  <div className="w-8 h-8 bg-gray-900 rounded-lg relative flex flex-col items-center shadow-xl border-2 border-white">
-                    {/* Kaaba Gold Belt */}
-                    <div className="w-full h-1.5 bg-yellow-500 absolute top-2" />
-                    {/* Kaaba Door (Visual hint) */}
-                    <div className="w-1.5 h-2.5 bg-yellow-600 absolute bottom-1 right-1.5 rounded-sm" />
-                  </div>
-                  <span className="text-[8px] font-bold text-primary uppercase tracking-tighter bg-white px-1 rounded shadow-sm border border-gray-100">Kaaba</span>
-                </div>
-              </motion.div>
-            </div>
-
-            <div className="text-center">
-              <p className="text-2xl font-light text-primary mb-1">
-                {qiblaDirection ? `${qiblaDirection.toFixed(1)}°` : '...'}
-              </p>
-              <p className="text-[10px] uppercase tracking-widest text-gray-400">
-                Degrees from North
-              </p>
-            </div>
           </div>
 
         </section>

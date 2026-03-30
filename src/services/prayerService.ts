@@ -21,14 +21,3 @@ export async function getPrayerTimesByCoords(latitude: number, longitude: number
   const data = await response.json();
   return data.data;
 }
-
-export async function getQiblaDirection(latitude: number, longitude: number): Promise<number> {
-  const response = await fetch(
-    `https://api.aladhan.com/v1/qibla/${latitude}/${longitude}`
-  );
-  if (!response.ok) {
-    throw new Error("Failed to fetch Qibla direction");
-  }
-  const data = await response.json();
-  return data.data.direction;
-}
